@@ -1,0 +1,51 @@
+
+These instructions assume the reader has some basic familiarity with NuoDB. See doc.nuodb.com for information on provisioning domains, starting
+and stopping database processes, and running SQL.
+
+1. Provision the domain with the most up-to-date version of NuoDB. Be sure to apply a license that allows running on your desired number of hosts.
+
+2. Build and install the client affinity balancer, located in the samples/plugin/client-affinity subdirectory of the NuoDB installation directory.
+ a. On a broker machine in your domain, change into the above referenced directory. Make sure that you have write permissions in that directory.
+ b. Compile the balancer: javac -cp ../../../jar/nuoagent.jar src/main/java/com/nuodb/sample/plugin/ClientAffinityBalancer.java
+ c. Package the balancer: jar -cf client-affinity.jar -C src/main/java com/nuodb/sample/plugin/ClientAffinityBalancer.class
+ d. Install the JAR to the plugin/agent subdirectory of the NuoDB installation directory.
+ e. Edit the broker's default.properties file in the etc subdirectory, setting the balancer property to: com.nuodb.sample.plugin.ClientAffinityBalancer
+ f. Restart the broker.
+
+3. Install the YCSB client on the machines that will run Transaction Engines.
+ a. Fetch the archive from https://github.com/downloads/nuodb/YCSB/ycsb-0.1.4.tar.gz
+ b. Extract the archive
+ c. Copy the NuoDB JDBC driver from the jar subdirectory of the NuoDB installation directory into the newly created YCSB directory
+
+4. Create the database
+ a. Start one SM and one TE with the options you are interested in benchmarking.
+ b. Issue the following SQL against your database:
+CREATE TABLE usertable(YCSB_KEY CHAR(23), FIELD1 VARCHAR(100), FIELD2 VARCHAR(100), FIELD3 VARCHAR(100), FIELD4 VARCHAR(100), FIELD5 VARCHAR(100), FIELD6 VARCHAR(100), FIELD7 VARCHAR(100), FIELD8 VARCHAR(100), FIELD9 VARCHAR(100), FIELD10 VARCHAR(100));
+CREATE INDEX YCSB_INDEX on usertable (YCSB_KEY);
+ Note: your SQL client will need to be located on the machine on which your TE is running, since you've installed the client affinity balancer.
+
+5. Load the database and shut down the TE
+ a. From the YCSB client install directory on the machine running your TE, issue the following command, using the database credentials chosen earlier and your JDBC url.
+bin/ycsb load jdbc -p threadcount=8 -P workloads/workloada -p recordcount=1000000 -p db.driver=com.nuodb.jdbc.Driver -p db.url=$JDBC_URL -p db.user=dba -p db.passwd=dba -p clientcount=1 -p clientid=1 -p insertorder=ordered -p recordcount=1000000 -p statusinterval=10000 -p requestdistribution=zipfian -p insertstart=0 -p insertcount=1000000 -s
+ Note: you may want to export the value of your JDBC_URL into your shell, since it may contain characters such as '?' and '&' which are special to your shell.
+ b. Shut down the TE
+
+6. Start the TEs that you will benchmark
+
+7. Warm up the database
+ a. From the YCSB client install directory on each machine with a TE, issue the following command, using the credentials and JDBC url as before. Give each client a different CLIENT_ID, set the NUM_CLIENTS, and pick a workload.
+bin/ycsb run jdbc -P workloads/$WORKLOAD -p db.driver=com.nuodb.jdbc.Driver -p db.url=$JDBC_URL -p db.user=dba -p db.passwd=dba -p clientcount=$NUM_CLIENTS -p clientid=$CLIENT_ID -p insertorder=ordered -p recordcount=1000000 -p statusinterval=10000 -p requestdistribution=zipfian -p insertstart=0 -p insertcount=1000000 -s -p maxexecutiontime=120 -p threadcount=8 -p operationcount=100000 -p recordcount=1000000
+ Note: you may want to use a utility such as cssh to run commands simultaneously on several machines.
+
+8. Run the benchmark and observe the results
+ a. From the YCSB client install directory on each machine with a TE, issue the following command, using the credentials and JDBC url as before. Give each client a different CLIENT_ID, set the NUM_CLIENTS, and pick a workload.
+bin/ycsb run jdbc -P workloads/$WORKLOAD -p db.driver=com.nuodb.jdbc.Driver -p db.url=$JDBC_URL -p db.user=dba -p db.passwd=dba -p clientcount=$NUM_CLIENTS -p clientid=$CLIENT_ID -p insertorder=ordered -p recordcount=1000000 -p statusinterval=10000 -p requestdistribution=zipfian -p insertstart=0 -p insertcount=1000000 -s -p maxexecutiontime=120 -p threadcount=8 -p operationcount=10000000 -p recordcount=1000000
+ b. To combine results from several machines, simply add up the Throughput, or average the Latency.
+
+9. Clean up the test environment
+ a. Shut down any remaining clients
+ b. Shut down the database processes
+ c. Remove the archive directory
+
+10. To run benchmarks again, either with different options or for increasing statistical significance, repeat these steps starting at number 4.
+
